@@ -1,0 +1,102 @@
+---
+title: "VectorAutoRegression"
+author: "Tria Rahmat Mauludin"
+date: "4/19/2022"
+output: 
+  html_document:
+    theme: yeti
+    highlight: tango
+    toc: true
+    toc_float: true
+    toc_depth: 2
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Background
+
+# Import Library
+```{r, warning=FALSE, message=FALSE}
+library(dplyr)
+library(padr)
+library(lubridate)
+library(forecast)
+library(MLmetrics)
+library(vars)
+```
+
+# Dataset
+```{r}
+ozone <- read.csv('dataset/eighthr.csv')
+ozone <- ozone[, c("Date", "T85", "RH85")]
+ozone$Date <- mdy(ozone$Date)
+head(ozone)
+```
+
+# Preprocessing Data
+```{r}
+ozone <- ozone %>% arrange(Date)
+head(ozone, 10)
+```
+```{r}
+ozone <- ozone %>% 
+  pad(start_val = min(ozone$Date), end_val = max(ozone$Date)) %>% 
+  mutate(T85 = na.locf(T85),
+         RH85 = na.locf(RH85))
+```
+```{r}
+colSums(is.na(ozone))
+```
+```{r}
+ts_data <- ts(ozone[,c("T85", "RH85")], start = c(1998,1))#, freq = 365)
+ts_data %>% autoplot(facets = TRUE)
+```
+
+
+# Spliting Data
+```{r}
+n_train <- as.integer(0.8*nrow(ozone))
+train_data <- head(ts_data, n_train)
+test_data <- tail(ts_data, -n_train)
+```
+
+```{r}
+VARselect(train_data, lag.max = 7, season = 365)
+```
+
+```{r}
+model_4 <- VAR(train_data[,c("T85", "RH85")], p=4, season = 365)
+model_2 <- VAR(train_data[,c("T85", "RH85")], p=2, season = 365)
+#summary(model_4)
+#summary(model_2)
+```
+```{r}
+prediction2 <- forecast(model_2, h = nrow(test_data))
+prediction4 <- forecast(model_4, h = nrow(test_data))
+```
+
+```{r}
+MAPE(prediction2$forecast$T85$mean, test_data[,"T85"])
+MAPE(prediction2$forecast$RH85$mean, test_data[,"RH85"])
+```
+```{r}
+MAPE(prediction4$forecast$T85$mean, test_data[,"T85"])
+MAPE(prediction4$forecast$RH85$mean, test_data[,"RH85"])
+```
+
+```{r}
+serial.test(model_2)
+normality.test(model_2)
+```
+
+```{r}
+causality(model_2, cause = "T85")
+```
+
+```{r}
+train_data[,"T85"] %>% autoplot(main = "TEMPERATURE") +
+  autolayer(test_data[,"T85"], series = "Test Data") +
+  autolayer(prediction2$forecast$T85$mean, series = "Forecast")
+```
+

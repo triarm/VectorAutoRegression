@@ -1,0 +1,159 @@
+---
+title: "Beijing Air Quality"
+author: "Tria Rahmat Mauludin"
+date: "4/19/2022"
+output: 
+  html_document:
+    theme: yeti
+    highlight: tango
+    df_print: paged
+    toc: true
+    toc_float: true
+    toc_depth: 2
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# clear-up the environment
+rm(list = ls())
+```
+
+# Background
+
+Time Series adalah sekumpulan data yang dikumpulkan berdasarkan urutan waktu. Data Time Series dapat kita gunakan untuk memahami pola yang terjadi di masa lalu dan melakukan suatu *forecasting* atau peramalan suatu nilai di masa depan.
+
+Salah satu bentuk dari time series adalah **Multivariate Time Series** yaitu data time series yang memiliki lebih dari satu variabel dan setiap variabel tersebut tidak hanya bergantung pada nilai di masa lalunya saja namun juga bergantung dengan nilai variabel lainnya. Salah satu contohnya adalah temperatur dan tekanan udara. Nilai temperatur tidak hanya dipengaruhi oleh nilainya di masa lampau namun dapat dipengaruhi juga oleh nilai tekanan udara. Hal yang sama dapat terjadi pula untuk sebaliknya. Pada artikel ini akan dibahas bagaimana membangun model Multivariate Time Series menggunakan **Vector Autoregressive (VAR)**.
+
+# Vector Autoregressive (VAR)
+
+Model VAR adalah generalisasi dari model univariate autoregressive (model AR dengan satu variabel). Dalam model VAR kita akan membangun persamaan untuk setiap variabel yang akan membentuk suatu sistem persamaan. Kita notasikan $y_{1,t}$ adalah nilai variabel $y_{1}$ pada observasi ke-*t* dan $y_{2,t}$ adalah nilai variabel $y_{2}$ pada observasi ke-*t*, dan seterusnya. Sebelum membangun model VAR, kita perlu menentukan terlebih dahulu banyaknya variabel yang akan digunakan (dinotasikan sebagai $K$) dan banyaknya lag (dinotasikan sebagai $p$) yang akan terlibat dalam sistem VAR. Misalkan kita memiliki VAR yang terdiri dari dua buah variabel dengan satu lag. Maka kita peroleh $VAR(1)$ dengan persamaan:
+$$
+y_{1,t} = c_{1} + \phi_{11}y_{1,t-1} + \phi_{12}y_{2,t-1} + e_{1,t}\\
+y_{2,t} = c_{2} + \phi_{21}y_{1,t-1} + \phi_{22}y_{2,t-1} + e_{2,t}
+$$
+Sistem persamaan di atas dapat kita tuliskan juga dalam notasi matriks berikut
+$$
+\begin{bmatrix}
+  y_{1,t} \\
+  y_{2,t}
+\end{bmatrix} = 
+
+\begin{bmatrix}
+  c_{1} \\
+  c_{2}
+\end{bmatrix} + 
+
+\begin{bmatrix}
+  \phi_{11} & \phi_{12} \\
+  \phi_{21} & \phi_{22}
+\end{bmatrix}
+
+\begin{bmatrix}
+  y_{1,t-1} \\
+  y_{2,t-1}
+\end{bmatrix} + 
+
+\begin{bmatrix}
+  e_{1,t} \\
+  e_{2,t}
+\end{bmatrix}
+$$
+# Import Library
+```{r, warning=FALSE, message=FALSE}
+library(dplyr)
+library(padr)
+library(lubridate)
+library(forecast)
+library(ggplot2)
+library(MLmetrics)
+library(vars)
+```
+
+# Dataset
+```{r}
+tiantan <- read.csv("dataset/PRSA_Data_20130301-20170228/PRSA_Data_Dongsi_20130301-20170228.csv")
+head(tiantan)
+```
+```{r}
+tiantan <- tiantan[tiantan$hour == 12,]
+tiantan$Date <- paste(tiantan$year, tiantan$month, tiantan$day, sep = "-") %>% ymd()
+head(tiantan, 10)
+```
+```{r}
+tiantan %>% is.na() %>% colSums()
+```
+
+```{r}
+tiantan <- tiantan %>%
+  pad(start_val = min(tiantan$Date), end_val = max(tiantan$Date)) %>% 
+  mutate_if(is.numeric, na.locf)
+str(tiantan)
+colSums(is.na(tiantan))
+```
+
+
+```{r}
+ts(tiantan[,c(6:15)], start = c(2013,60), freq = 365) %>% 
+  autoplot(facets = TRUE)
+```
+
+```{r}
+data_ts <- ts(tiantan[,c("TEMP", "PRES", "DEWP")], start = c(2013,60), freq=365)
+data_ts %>% autoplot(facets = TRUE)
+```
+
+```{r}
+n_train <- as.integer(0.8*nrow(data_ts))
+train_data <- head(data_ts, n_train)
+test_data <- tail(data_ts, -n_train)
+```
+
+```{r}
+VARselect(train_data, lag.max = 7, season = 365)
+```
+
+```{r}
+model_5 <- VAR(train_data, p=5, season = 365)
+#summary(model_5)
+```
+
+```{r}
+prediction <- forecast(model_5, h = nrow(test_data))
+```
+
+```{r}
+MAPE(prediction$forecast$TEMP$mean, test_data[,"TEMP"])
+MAPE(prediction$forecast$PRES$mean, test_data[,"PRES"])
+MAPE(prediction$forecast$DEWP$mean, test_data[,"DEWP"])
+```
+```{r}
+train_data[,"TEMP"] %>% autoplot(main = "TEMPERATURE") +
+  autolayer(test_data[,"TEMP"], series = "Test Data") +
+  autolayer(prediction$forecast$TEMP$mean, series = "Forecast")
+```
+```{r}
+train_data[,"PRES"] %>% autoplot(main = "PRESSURE") +
+  autolayer(test_data[,"PRES"], series = "Test Data") +
+  autolayer(prediction$forecast$PRES$mean, series = "Forecast")
+```
+
+```{r}
+train_data[,"DEWP"] %>% autoplot(main = "DEW Point Temperature") +
+  autolayer(test_data[,"DEWP"], series = "Test Data") +
+  autolayer(prediction$forecast$DEWP$mean, series = "Forecast")
+```
+
+```{r}
+train_data[,"TEMP"] %>% decompose() %>% autoplot()
+```
+
+```{r}
+library(tseries)
+adf.test(train_data[,"TEMP"])
+```
+
+```{r}
+cor(tiantan$TEMP, tiantan$DEW)
+```
+
