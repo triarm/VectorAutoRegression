@@ -28,38 +28,41 @@ Salah satu bentuk dari time series adalah **Multivariate Time Series** yaitu dat
 # Vector Autoregressive (VAR)
 
 Model VAR adalah generalisasi dari model univariate autoregressive (model AR dengan satu variabel). Dalam model VAR kita akan membangun persamaan untuk setiap variabel yang akan membentuk suatu sistem persamaan. Kita notasikan $y_{1,t}$ adalah nilai variabel $y_{1}$ pada observasi ke-*t* dan $y_{2,t}$ adalah nilai variabel $y_{2}$ pada observasi ke-*t*, dan seterusnya. Sebelum membangun model VAR, kita perlu menentukan terlebih dahulu banyaknya variabel yang akan digunakan (dinotasikan sebagai $K$) dan banyaknya lag (dinotasikan sebagai $p$) yang akan terlibat dalam sistem VAR. Misalkan kita memiliki VAR yang terdiri dari dua buah variabel dengan satu lag. Maka kita peroleh $VAR(1)$ dengan persamaan:
+
 $$
 y_{1,t} = c_{1} + \phi_{11}y_{1,t-1} + \phi_{12}y_{2,t-1} + e_{1,t}\\
 y_{2,t} = c_{2} + \phi_{21}y_{1,t-1} + \phi_{22}y_{2,t-1} + e_{2,t}
 $$
+
 Sistem persamaan di atas dapat kita tuliskan juga dalam notasi matriks berikut
+
 $$
 \begin{bmatrix}
   y_{1,t} \\
   y_{2,t}
 \end{bmatrix} = 
-
 \begin{bmatrix}
   c_{1} \\
   c_{2}
 \end{bmatrix} + 
-
 \begin{bmatrix}
   \phi_{11} & \phi_{12} \\
   \phi_{21} & \phi_{22}
 \end{bmatrix}
-
 \begin{bmatrix}
   y_{1,t-1} \\
   y_{2,t-1}
 \end{bmatrix} + 
-
 \begin{bmatrix}
   e_{1,t} \\
   e_{2,t}
 \end{bmatrix}
 $$
+
 # Import Library
+
+Untuk mengimplementasikan VAR di R, kita akan menggunakan package `vars`. Selain itu, kita akan menggunakan beberapa package lainnya untuk melakukan preprocessing data, visualisasi data, serta evaluasi model.
+
 ```{r, warning=FALSE, message=FALSE}
 library(dplyr)
 library(padr)
@@ -67,41 +70,87 @@ library(lubridate)
 library(forecast)
 library(ggplot2)
 library(MLmetrics)
+library(lmtest)
 library(vars)
 ```
 
-# Dataset
+# Read Data
+
+Kita akan menggunakan data `dongsi.csv` berikut yang merupakan data terkait kualitas udara di subdistrict Dongsi, Beijing. Deskripsi lebih lanjut dari data dapat dilihat pada [link berikut](https://archive.ics.uci.edu/ml/datasets/Beijing+Multi-Site+Air-Quality+Data)
+
 ```{r}
-tiantan <- read.csv("dataset/PRSA_Data_20130301-20170228/PRSA_Data_Dongsi_20130301-20170228.csv")
-head(tiantan)
+dongsi <- read.csv("dataset/PRSA_Data_20130301-20170228/PRSA_Data_Dongsi_20130301-20170228.csv")
+head(dongsi)
 ```
+
+# Data Preprocessing
+
+Tahapan preprocessing yang dilakukan adalah:
+
+1. Mengambil data hanya pada jam 12:00
+2. Membuat kolom `Date` yang berisi tanggal pengambilan observasi
+3. Cek NA values dan lakukan imputasi
+
 ```{r}
-tiantan <- tiantan[tiantan$hour == 12,]
-tiantan$Date <- paste(tiantan$year, tiantan$month, tiantan$day, sep = "-") %>% ymd()
-head(tiantan, 10)
-```
-```{r}
-tiantan %>% is.na() %>% colSums()
+# Step 1
+dongsi <- dongsi[dongsi$hour == 12,]
+
+# Step 2
+dongsi$Date <- paste(dongsi$year, dongsi$month, dongsi$day, sep = "-") %>% ymd()
+
+head(dongsi, 10)
 ```
 
 ```{r}
-tiantan <- tiantan %>%
-  pad(start_val = min(tiantan$Date), end_val = max(tiantan$Date)) %>% 
+# Step 3
+dongsi %>% is.na() %>% colSums()
+```
+
+Terdapat beberapa kolom yang memiliki nilai missing value. Maka kita lakukan imputasi dengan metode **backward filling** (mengisi NA values berdasarkan nilai terakhir sebelum NA)
+
+```{r}
+dongsi <- dongsi %>%
+  pad(start_val = min(dongsi$Date), end_val = max(dongsi$Date)) %>% 
   mutate_if(is.numeric, na.locf)
-str(tiantan)
-colSums(is.na(tiantan))
+colSums(is.na(dongsi))
 ```
 
+# Exploratory Data Analysis
+
+Pertama, kita lihat terlebih dahulu visualisasi pada masing-masing kolom.
 
 ```{r}
-ts(tiantan[,c(6:15)], start = c(2013,60), freq = 365) %>% 
+ts(dongsi[,c(6:15)], start = c(2013,60), freq = 365) %>% 
   autoplot(facets = TRUE)
 ```
+Perhatikan bahwa pada kolom `TEMP` dan `PRES` terjadi hubungan yang cukup kuat. Ketika nilai `TEMP` meningkat maka nilai `PRES` cenderung menurun dan begitu pula untuk sebaliknya. Untuk mengetahui hubungan apakah nilai dari suatu variabel di masa lampau dapat memengaruhi variabel lainnya di masa depan, kita dapat menggunakan uji **Granger Causality Test**. Untuk melakukan uji tersebut, kita dapat menggunakan fungsi `grangertest` dari package `lmtest`
 
 ```{r}
-data_ts <- ts(tiantan[,c("TEMP", "PRES", "DEWP")], start = c(2013,60), freq=365)
+grangertest(dongsi$TEMP, dongsi$PRES)
+```
+
+> Diperoleh bahwa nilai p-values < 0.05 maka dapat disimpulkan bahwa variabel TEMP di masa lampau dapat digunakan untuk memprediksi nilai PRES di masa depan
+
+Kita juga perlu menguji apakah hal sebaliknya dapat berlaku, yaitu apakah variabel PRES dapat digunakan untuk memprediksi nilai TEMP di masa depan
+
+```{r}
+grangertest(dongsi$PRES, dongsi$TEMP)
+```
+
+> Diperoleh bahwa nilai p-values < 0.05 maka dapat disimpulkan variabel PRES dapat digunakan untuk memprediksi nilai TEMP di masa depan
+
+Berdasarkan hasil di atas, maka kita dapat membangun model multivariate time series yang terdiri dari dua buah variabel yaitu TEMP dan PRES.
+
+# Modeling
+
+Pertama, kita buat kolom `TEMP` dan `PRES` menjadi object time series.
+
+```{r}
+data_ts <- ts(dongsi[,c("TEMP", "PRES")], start = c(2013,60), freq=365)
 data_ts %>% autoplot(facets = TRUE)
 ```
+
+Lakukan spliting data train dan data test
 
 ```{r}
 n_train <- as.integer(0.8*nrow(data_ts))
@@ -109,51 +158,46 @@ train_data <- head(data_ts, n_train)
 test_data <- tail(data_ts, -n_train)
 ```
 
+Pada package vars, terdapat fungsi `VARselect` yang dapat digunakan untuk mencari lag yang menghasilkan model dengan performa yang paling baik. Parameter `lag.max` menunjukkan nilai maksimum lag yang akan dicari dan `season` menunjukkan seasonality pada data.
+
 ```{r}
 VARselect(train_data, lag.max = 7, season = 365)
 ```
 
+Dengan melihat nilai AIC pada output di atas, diperoleh bahwa model VAR(5) merupakan model yang terbaik dibandingkan dengan lag lainnya. Maka langkah selanjutnya adalah membangun model tersebut dengan fungsi `VAR`
+
 ```{r}
 model_5 <- VAR(train_data, p=5, season = 365)
-#summary(model_5)
 ```
+
+# Forecasting
+
+Setelah memperoleh model, maka kita akan menggunakan model tersebut untuk melakukan forecasting sebanyak data pada `test_data`
 
 ```{r}
 prediction <- forecast(model_5, h = nrow(test_data))
 ```
 
+Mari kita visualisasikan hasil forecasting dan membandingkannya dengan nilai pada `test_data`
+
 ```{r}
-MAPE(prediction$forecast$TEMP$mean, test_data[,"TEMP"])
-MAPE(prediction$forecast$PRES$mean, test_data[,"PRES"])
-MAPE(prediction$forecast$DEWP$mean, test_data[,"DEWP"])
-```
-```{r}
-train_data[,"TEMP"] %>% autoplot(main = "TEMPERATURE") +
+# plot TEMP
+train_data[,"TEMP"] %>% 
+  autoplot(main = "TEMPERATURE") +
   autolayer(test_data[,"TEMP"], series = "Test Data") +
   autolayer(prediction$forecast$TEMP$mean, series = "Forecast")
 ```
+
 ```{r}
+# Plot PRES
 train_data[,"PRES"] %>% autoplot(main = "PRESSURE") +
   autolayer(test_data[,"PRES"], series = "Test Data") +
   autolayer(prediction$forecast$PRES$mean, series = "Forecast")
 ```
 
-```{r}
-train_data[,"DEWP"] %>% autoplot(main = "DEW Point Temperature") +
-  autolayer(test_data[,"DEWP"], series = "Test Data") +
-  autolayer(prediction$forecast$DEWP$mean, series = "Forecast")
-```
+Dari visualisasi di atas, dapat kita lihat bahwa hasil forecast sudah mengikuti pola dari nilai aktualnya. Untuk memeriksa lebih lanjut, mari kita lihat nilai MAPE dari kedua variabel tersebut.
 
 ```{r}
-train_data[,"TEMP"] %>% decompose() %>% autoplot()
+MAPE(prediction$forecast$TEMP$mean, test_data[,"TEMP"])
+MAPE(prediction$forecast$PRES$mean, test_data[,"PRES"])
 ```
-
-```{r}
-library(tseries)
-adf.test(train_data[,"TEMP"])
-```
-
-```{r}
-cor(tiantan$TEMP, tiantan$DEW)
-```
-
