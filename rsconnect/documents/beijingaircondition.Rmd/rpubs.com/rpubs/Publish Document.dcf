@@ -1,0 +1,11 @@
+name: Publish Document
+title:
+username:
+account: rpubs
+server: rpubs.com
+hostUrl: rpubs.com
+appId: https://api.rpubs.com/api/v1/document/906836/f1702787f2c444d3a249e805895eb104
+bundleId: https://api.rpubs.com/api/v1/document/906836/f1702787f2c444d3a249e805895eb104
+url: http://rpubs.com/triarm/906836
+when: 1653483243.26867
+lastSyncTime: 1653483243.26867

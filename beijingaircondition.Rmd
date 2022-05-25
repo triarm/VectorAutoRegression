@@ -1,7 +1,7 @@
 ---
-title: "Beijing Air Quality"
+title: "Introduction to Vector Autoregressive (VAR)"
 author: "Tria Rahmat Mauludin"
-date: "4/19/2022"
+date: "5/25/2022"
 output: 
   html_document:
     theme: yeti
@@ -30,9 +30,18 @@ Salah satu bentuk dari time series adalah **Multivariate Time Series** yaitu dat
 Model VAR adalah generalisasi dari model univariate autoregressive (model AR dengan satu variabel). Dalam model VAR kita akan membangun persamaan untuk setiap variabel yang akan membentuk suatu sistem persamaan. Kita notasikan $y_{1,t}$ adalah nilai variabel $y_{1}$ pada observasi ke-*t* dan $y_{2,t}$ adalah nilai variabel $y_{2}$ pada observasi ke-*t*, dan seterusnya. Sebelum membangun model VAR, kita perlu menentukan terlebih dahulu banyaknya variabel yang akan digunakan (dinotasikan sebagai $K$) dan banyaknya lag (dinotasikan sebagai $p$) yang akan terlibat dalam sistem VAR. Misalkan kita memiliki VAR yang terdiri dari dua buah variabel dengan satu lag. Maka kita peroleh $VAR(1)$ dengan persamaan:
 
 $$
-y_{1,t} = c_{1} + \phi_{11}y_{1,t-1} + \phi_{12}y_{2,t-1} + e_{1,t}\\
-y_{2,t} = c_{2} + \phi_{21}y_{1,t-1} + \phi_{22}y_{2,t-1} + e_{2,t}
+y_{1,t} = c_{1} + \phi_{11,1}y_{1,t-1} + \phi_{12,1}y_{2,t-1} + e_{1,t}\\
+y_{2,t} = c_{2} + \phi_{21,1}y_{1,t-1} + \phi_{22,1}y_{2,t-1} + e_{2,t}
 $$
+
+dengan
+
+$c_{i}$ : konstanta untuk variabel $i$
+
+$\phi_{ij,l}$ : Pengaruh variabel $j$ pada lag ke-$l$ terhadap variabel $i$
+
+$e_{i,t}$ : Residual/error variabel $i$
+
 
 Sistem persamaan di atas dapat kita tuliskan juga dalam notasi matriks berikut
 
@@ -83,6 +92,26 @@ dongsi <- read.csv("dataset/PRSA_Data_20130301-20170228/PRSA_Data_Dongsi_2013030
 head(dongsi)
 ```
 
+Keterangan:
+
+- `year` : Tahun pengamatan
+- `month` : Bulan pengamatan
+- `day` : Tanggal pengamatan
+- `hour` : Jam pengamatan
+- `PM2.5` : Konsentrasi PM2.5 ($\mu g/m^3$)
+- `PM10` : Konsentrasi PM10 ($\mu g/m^3$)
+- `SO2` : Konsentrasi $SO_{2}$ ($\mu g/m^3$)
+- `NO2` : Konsentrasi $NO_{2}$ ($\mu g/m^3$)
+- `CO` : Konsentrasi $CO$ ($\mu g/m^3$)
+- `O3` : Konsentrasi $O_3$ ($\mu g/m^3$)
+- `TEMP` : Temperatur (Celsius)
+- `PRES` : Tekanan (hPa)
+- `DEWP` : dew point temperature (Celsius)
+- `RAIN` : Curah Hujan (mm)
+- `wd` : Arah angin
+- `WSPM` : Kecepatan angin (m/s)
+- `station` : Stasiun pengamatan
+
 # Data Preprocessing
 
 Tahapan preprocessing yang dilakukan adalah:
@@ -96,7 +125,7 @@ Tahapan preprocessing yang dilakukan adalah:
 dongsi <- dongsi[dongsi$hour == 12,]
 
 # Step 2
-dongsi$Date <- paste(dongsi$year, dongsi$month, dongsi$day, sep = "-") %>% ymd()
+dongsi$Date <- paste(dongsi$year, "-", dongsi$month, "-", dongsi$day) %>% ymd()
 
 head(dongsi, 10)
 ```
@@ -106,7 +135,7 @@ head(dongsi, 10)
 dongsi %>% is.na() %>% colSums()
 ```
 
-Terdapat beberapa kolom yang memiliki nilai missing value. Maka kita lakukan imputasi dengan metode **backward filling** (mengisi NA values berdasarkan nilai terakhir sebelum NA)
+Terdapat beberapa kolom yang memiliki nilai missing value. Maka kita lakukan imputasi dengan metode **forward filling** (mengisi NA values berdasarkan nilai terakhir sebelum NA)
 
 ```{r}
 dongsi <- dongsi %>%
@@ -123,10 +152,17 @@ Pertama, kita lihat terlebih dahulu visualisasi pada masing-masing kolom.
 ts(dongsi[,c(6:15)], start = c(2013,60), freq = 365) %>% 
   autoplot(facets = TRUE)
 ```
-Perhatikan bahwa pada kolom `TEMP` dan `PRES` terjadi hubungan yang cukup kuat. Ketika nilai `TEMP` meningkat maka nilai `PRES` cenderung menurun dan begitu pula untuk sebaliknya. Untuk mengetahui hubungan apakah nilai dari suatu variabel di masa lampau dapat memengaruhi variabel lainnya di masa depan, kita dapat menggunakan uji **Granger Causality Test**. Untuk melakukan uji tersebut, kita dapat menggunakan fungsi `grangertest` dari package `lmtest`
+
+Perhatikan bahwa pada kolom `TEMP` dan `PRES` terjadi hubungan yang cukup kuat. Ketika nilai `TEMP` meningkat maka nilai `PRES` cenderung menurun dan begitu pula untuk sebaliknya. Untuk mengetahui hubungan apakah nilai dari suatu variabel di masa lampau dapat memengaruhi variabel lainnya di masa depan, kita dapat menggunakan uji **Granger Causality Test**. Berikut adalah hipotesis untuk uji Granger Causality:
+
+$H_0$ : X tidak dapat digunakan untuk memprediksi Y
+
+$H_1$ : X dapat digunakan untuk memprediksi Y
+
+Pada kasus multivariate time series, kita perlu melakukan pengujian secara dua arah yaitu apakah X dapat digunakan untuk memprediksi Y dan apakah Y dapat digunakan untuk memprediksi X. Untuk melakukan uji tersebut, kita dapat menggunakan fungsi `grangertest` dari package `lmtest`
 
 ```{r}
-grangertest(dongsi$TEMP, dongsi$PRES)
+grangertest(x = dongsi$TEMP, y = dongsi$PRES)
 ```
 
 > Diperoleh bahwa nilai p-values < 0.05 maka dapat disimpulkan bahwa variabel TEMP di masa lampau dapat digunakan untuk memprediksi nilai PRES di masa depan
@@ -134,7 +170,7 @@ grangertest(dongsi$TEMP, dongsi$PRES)
 Kita juga perlu menguji apakah hal sebaliknya dapat berlaku, yaitu apakah variabel PRES dapat digunakan untuk memprediksi nilai TEMP di masa depan
 
 ```{r}
-grangertest(dongsi$PRES, dongsi$TEMP)
+grangertest(x = dongsi$PRES, y = dongsi$TEMP)
 ```
 
 > Diperoleh bahwa nilai p-values < 0.05 maka dapat disimpulkan variabel PRES dapat digunakan untuk memprediksi nilai TEMP di masa depan
@@ -158,27 +194,27 @@ train_data <- head(data_ts, n_train)
 test_data <- tail(data_ts, -n_train)
 ```
 
-Pada package vars, terdapat fungsi `VARselect` yang dapat digunakan untuk mencari lag yang menghasilkan model dengan performa yang paling baik. Parameter `lag.max` menunjukkan nilai maksimum lag yang akan dicari dan `season` menunjukkan seasonality pada data.
+Pada package vars, terdapat fungsi `VARselect` yang dapat digunakan untuk mencari lag yang menghasilkan model dengan performa yang paling baik. Parameter `lag.max` menunjukkan nilai maksimum lag yang akan dicari dan `season` menunjukkan seasonality pada data. Fungsi tersebut akan mencoba membuat model VAR dari lag 1,2, sampai `lag.max`. Pada masing-masing lag tersebut akan dihitung seberapa baik model tersebut berdasarkan kriteria AIC, HQ, SC, dan FPE. Kemudian fungsi akan memberikan output lag mana yang memberikan nilai-nilai paling kecil untuk masing-masing kriteria.
 
 ```{r}
-VARselect(train_data, lag.max = 7, season = 365)
+VARselect(train_data, lag.max = 10, season = 365)
 ```
 
-Dengan melihat nilai AIC pada output di atas, diperoleh bahwa model VAR(5) merupakan model yang terbaik dibandingkan dengan lag lainnya. Maka langkah selanjutnya adalah membangun model tersebut dengan fungsi `VAR`
+Dengan mempertimbangkan nilai AIC pada output di atas, diperoleh bahwa model VAR(5) merupakan model yang terbaik dibandingkan dengan lag lainnya. Maka langkah selanjutnya adalah membangun model tersebut dengan fungsi `VAR`
 
 ```{r}
-model_5 <- VAR(train_data, p=5, season = 365)
+model <- VAR(train_data, p=5, season = 365)
 ```
 
-# Forecasting
+# Evaluation
 
-Setelah memperoleh model, maka kita akan menggunakan model tersebut untuk melakukan forecasting sebanyak data pada `test_data`
+Setelah memperoleh model, maka kita akan menggunakan model tersebut untuk melakukan evaluasi menggunakan `test_data`. Pertama akan kita lakukan forecasting sebanyak baris pada data tersebut.
 
 ```{r}
-prediction <- forecast(model_5, h = nrow(test_data))
+prediction <- forecast(model, h = nrow(test_data))
 ```
 
-Mari kita visualisasikan hasil forecasting dan membandingkannya dengan nilai pada `test_data`
+Kemudian, mari kita visualisasikan hasil forecasting dan membandingkannya dengan nilai pada `test_data`
 
 ```{r}
 # plot TEMP
@@ -195,9 +231,51 @@ train_data[,"PRES"] %>% autoplot(main = "PRESSURE") +
   autolayer(prediction$forecast$PRES$mean, series = "Forecast")
 ```
 
-Dari visualisasi di atas, dapat kita lihat bahwa hasil forecast sudah mengikuti pola dari nilai aktualnya. Untuk memeriksa lebih lanjut, mari kita lihat nilai MAPE dari kedua variabel tersebut.
+Dari visualisasi di atas, dapat kita lihat bahwa hasil forecast sudah mengikuti pola dari nilai aktualnya. Untuk memeriksa lebih lanjut, mari kita lihat nilai MAE dari kedua variabel tersebut untuk mengetahui seberapa jauh rata-rata penyimpangan prediksi kita.
 
 ```{r}
-MAPE(prediction$forecast$TEMP$mean, test_data[,"TEMP"])
-MAPE(prediction$forecast$PRES$mean, test_data[,"PRES"])
+mae_temp <- MAE(prediction$forecast$TEMP$mean, test_data[,"TEMP"])
+mae_pres <- MAE(prediction$forecast$PRES$mean, test_data[,"PRES"])
+paste("MAE untuk temperature: ", mae_temp)
+paste("MAE untuk pressure: ", mae_pres)
 ```
+
+Dari output di atas, diperoleh bahwa nilai MAE untuk temperatur dan pressure adalah 2.70 dan 4.74. Hal ini menunjukkan bahwa secara rata-rata hasil prediksi kita akan menyimpang terhadap nilai aktual sebesar 2.70 derajat celcius untuk temperatur dan 4.74 hPa untuk pressure. Dengan nilai tersebut maka dapat disimpulkan bahwa model yang telah dibuat sudah cukup baik untuk melakukan forecasting data.
+
+# Forecasting
+
+Langkah selanjutnya adalah kita akan coba lakukan forecasting pada waktu satu tahun ke depan dari data yang kita punya. Untuk melakukan hal tersebut, kita akan coba lakukan pemodelan ulang dengan lag dan parameter yang sama seperti sebelumnya namun data yang kita gunakan adalah keseluruhan data (data sebelum dilakukan spliting), yaitu `data_ts`.
+
+```{r}
+# pemodelan
+final_model <- VAR(data_ts, p = 5, season = 365)
+
+# forecasting
+forecasting <- forecast(final_model, h = 365)
+```
+
+Kemudian, kita coba lakukan visualisasi hasil forecasting
+
+```{r}
+# Plot temperature
+data_ts[,"TEMP"] %>% 
+  autoplot(main = "TEMPERATURE") +
+  autolayer(forecasting$forecast$TEMP$mean, series = "Forecast")
+```
+
+```{r}
+# Plot Pressure
+data_ts[,"PRES"] %>% autoplot(main = "PRESSURE") +
+  autolayer(forecasting$forecast$PRES$mean, series = "Forecast")
+```
+
+# Kesimpulan
+
+Dari artikel ini, kita telah mempelajari terkait multivariate time series yaitu time series yang terdiri dari beberapa variabel/prediktor. Salah satu model yang dapat digunakan untuk memodelkan tipe time series ini adalah **Vector Autoregressive (VAR)**. Model ini dapat kita manfaatkan untuk menggambarkan pengaruh dari satu variabel ke variabel lainnya. Tentunya, model ini dapat digunakan di berbagai bidang seperti makroekonomi, meteorologi, dan kesehatan.
+
+Pada model VAR, kita perlu menentukan variabel apa yang dapat dimasukkan ke dalam model dan seberapa jauh lag yang akan diambil.
+
+- Untuk menentukan variabel yang dapat digunakan, kita dapat melakukan uji **Granger Causality Test**. Uji tersebut digunakan untuk melihat apakah suatu variabel dapat digunakan untuk memprediksi variabel lainnya. Uji ini perlu dilakukan secara dua arah.
+
+- Untuk menentukan lag yang akan diambil, kita dapat memanfaatkan fungsi `VARselect()` yang akan membuat beberapa model dengan lag yang berbeda dan akan memberikan output lag yang memberikan performa terbaik berdasarkan kriteria AIC, HQ, SC, atau FPE.
+
