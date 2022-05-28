@@ -116,7 +116,7 @@ Keterangan:
 
 Tahapan preprocessing yang dilakukan adalah:
 
-1. Mengambil data hanya pada jam 12:00
+1. Pada dataset yang kita miliki, observasi diambil setiap jam (hourly). Karena kita akan melakukan pemodelan time series dalam rentang waktu harian (daily) maka kita hanya akan mengambil data pada jam 12:00 saja
 2. Membuat kolom `Date` yang berisi tanggal pengambilan observasi
 3. Cek NA values dan lakukan imputasi
 
@@ -194,7 +194,7 @@ train_data <- head(data_ts, n_train)
 test_data <- tail(data_ts, -n_train)
 ```
 
-Pada package vars, terdapat fungsi `VARselect` yang dapat digunakan untuk mencari lag yang menghasilkan model dengan performa yang paling baik. Parameter `lag.max` menunjukkan nilai maksimum lag yang akan dicari dan `season` menunjukkan seasonality pada data. Fungsi tersebut akan mencoba membuat model VAR dari lag 1,2, sampai `lag.max`. Pada masing-masing lag tersebut akan dihitung seberapa baik model tersebut berdasarkan kriteria AIC, HQ, SC, dan FPE. Kemudian fungsi akan memberikan output lag mana yang memberikan nilai-nilai paling kecil untuk masing-masing kriteria.
+Pada package vars, terdapat fungsi `VARselect` yang dapat digunakan untuk mencari lag yang menghasilkan model dengan performa yang paling baik. Parameter `lag.max` menunjukkan nilai maksimum lag yang akan dicari dan `season` menunjukkan seasonality pada data. Fungsi tersebut akan mencoba membuat model VAR dari lag 1,2, sampai `lag.max`. Pada masing-masing lag tersebut akan dihitung seberapa baik model tersebut berdasarkan kriteria AIC, HQ, SC, dan FPE. Nilai-nilai tersebut dapat diinterpretasikan sebagai banyaknya informasi yang hilang dari model yang telah dibuat. Semakin kecil nilai tersebut maka model semakin baik. Fungsi `VARselect` akan memberikan output lag mana yang memberikan nilai-nilai paling kecil untuk masing-masing kriteria tersebut.
 
 ```{r}
 VARselect(train_data, lag.max = 10, season = 365)

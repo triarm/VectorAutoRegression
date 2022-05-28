@@ -2979,7 +2979,7 @@ y_{2,t} = c_{2} + \phi_{21,1}y_{1,t-1} + \phi_{22,1}y_{2,t-1} + e_{2,t}
 <h1>Data Preprocessing</h1>
 <p>Tahapan preprocessing yang dilakukan adalah:</p>
 <ol style="list-style-type: decimal">
-<li>Mengambil data hanya pada jam 12:00</li>
+<li>Pada dataset yang kita miliki, observasi diambil setiap jam (hourly). Karena kita akan melakukan pemodelan time series dalam rentang waktu harian (daily) maka kita hanya akan mengambil data pada jam 12:00 saja</li>
 <li>Membuat kolom <code>Date</code> yang berisi tanggal pengambilan observasi</li>
 <li>Cek NA values dan lakukan imputasi</li>
 </ol>
@@ -3053,7 +3053,7 @@ y_{2,t} = c_{2} + \phi_{21,1}y_{1,t-1} + \phi_{22,1}y_{2,t-1} + e_{2,t}
 <div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1"></a>n_train &lt;-<span class="st"> </span><span class="kw">as.integer</span>(<span class="fl">0.8</span><span class="op">*</span><span class="kw">nrow</span>(data_ts))</span>
 <span id="cb14-2"><a href="#cb14-2"></a>train_data &lt;-<span class="st"> </span><span class="kw">head</span>(data_ts, n_train)</span>
 <span id="cb14-3"><a href="#cb14-3"></a>test_data &lt;-<span class="st"> </span><span class="kw">tail</span>(data_ts, <span class="op">-</span>n_train)</span></code></pre></div>
-<p>Pada package vars, terdapat fungsi <code>VARselect</code> yang dapat digunakan untuk mencari lag yang menghasilkan model dengan performa yang paling baik. Parameter <code>lag.max</code> menunjukkan nilai maksimum lag yang akan dicari dan <code>season</code> menunjukkan seasonality pada data. Fungsi tersebut akan mencoba membuat model VAR dari lag 1,2, sampai <code>lag.max</code>. Pada masing-masing lag tersebut akan dihitung seberapa baik model tersebut berdasarkan kriteria AIC, HQ, SC, dan FPE. Kemudian fungsi akan memberikan output lag mana yang memberikan nilai-nilai paling kecil untuk masing-masing kriteria.</p>
+<p>Pada package vars, terdapat fungsi <code>VARselect</code> yang dapat digunakan untuk mencari lag yang menghasilkan model dengan performa yang paling baik. Parameter <code>lag.max</code> menunjukkan nilai maksimum lag yang akan dicari dan <code>season</code> menunjukkan seasonality pada data. Fungsi tersebut akan mencoba membuat model VAR dari lag 1,2, sampai <code>lag.max</code>. Pada masing-masing lag tersebut akan dihitung seberapa baik model tersebut berdasarkan kriteria AIC, HQ, SC, dan FPE. Nilai-nilai tersebut dapat diinterpretasikan sebagai banyaknya informasi yang hilang dari model yang telah dibuat. Semakin kecil nilai tersebut maka model semakin baik. Fungsi <code>VARselect</code> akan memberikan output lag mana yang memberikan nilai-nilai paling kecil untuk masing-masing kriteria tersebut.</p>
 <div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1"></a><span class="kw">VARselect</span>(train_data, <span class="dt">lag.max =</span> <span class="dv">10</span>, <span class="dt">season =</span> <span class="dv">365</span>)</span></code></pre></div>
 <pre><code>## $selection
 ## AIC(n)  HQ(n)  SC(n) FPE(n) 
